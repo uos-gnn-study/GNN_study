@@ -1,5 +1,7 @@
 # 📚 UOS GNN (Graph Neural Network) 스터디
-
+[![Discord](https://img.shields.io/badge/Discord-5865F2?style=for-the-badge&logo=discord&logoColor=white)](https://discord.gg/PHGmZuvmVJ)
+[![Notion](https://img.shields.io/badge/Notion-000000?style=for-the-badge&logo=notion&logoColor=white)](https://www.notion.so/GNN-Graph-Neural-Network-1b88f8dbae1f80928413e33315d8c1bf/)
+[![GitHub](https://img.shields.io/badge/GitHub-181717?style=for-the-badge&logo=github&logoColor=white)](https://github.com/uos-gnn-study/GNN_study)
 > 그래프 이론과 GNN을 함께 공부하는 스터디입니다.  
 > 이론부터 논문, 실제 문제 적용까지 함께 성장하는 것을 목표로 합니다.
 
