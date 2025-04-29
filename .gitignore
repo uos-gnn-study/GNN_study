@@ -1,4 +1,8 @@
-# latex
-.fls
-.log
-.fdb_latexmk
+# vscode
+.vscode
+
+# python
+.venv
+.env
+venv
+env
