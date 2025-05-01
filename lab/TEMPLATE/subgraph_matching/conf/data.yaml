@@ -1,0 +1,9 @@
+num_data:
+  train             : 200     # 학습 데이터 수
+  validate          : 200     # 검증 데이터 수
+  test              : 200     # 테스트 데이터 수
+
+num_subgraph_nodes    : 5       # 서브그래프 노드 수
+num_graph_nodes       : 10      # 그래프 노드 수
+delta                 : 0.5     # 연결 확률
+feature_std           : 0.25    # feature standard
