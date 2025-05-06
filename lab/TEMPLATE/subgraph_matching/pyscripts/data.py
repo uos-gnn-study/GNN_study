@@ -1,166 +1,183 @@
-from torch_geometric.data import InMemoryDataset, Data
-from torch_geometric.utils import to_networkx
-from typing import override, Iterator, Literal
-import yaml
+"""데이터셋을 정의하는 모듈입니다.
+
+`PyG`를 바탕으로 *Subgraph Matching Problem*에서 사용할 데이터셋을 정의합니다.
+`./conf/data.yaml`에서 불러온 구성 정보를 바탕으로 처리합니다.
+
+Example:
+
+    dataset = SubgraphMatchingDataset(root="./data/")
+    dataset.load("train")
+"""
+
+from utils.configure import Configure
+from pyscripts.graph import Edge, Graph
+from torch_geometric.data import InMemoryDataset
+from torch_geometric.data.data import Data, BaseData, DataEdgeAttr, DataTensorAttr, GlobalStorage
+from os import PathLike
+from itertools import permutations
+from random import random, choice, randint, gauss
+from typing import override
 import torch
-import os.path as osp
-from random import random, shuffle, randint, gauss
-from itertools import combinations
-from collections import defaultdict, deque
-from dataclasses import dataclass
-import networkx as nx
+from torch.serialization import add_safe_globals
 
-# Configure 가져오기
-with open("./conf/data.yaml") as f:
-    data_conf = yaml.load(f, yaml.FullLoader)
+add_safe_globals([Data, BaseData, DataEdgeAttr, DataTensorAttr, GlobalStorage])
 
-NUM_DATA                = data_conf["num_data"]                 # 데이터 수
-NUM_SUBGRAPH_NODES      = data_conf["num_subgraph_nodes"]       # 서브그래프 노드수
-NUM_GRAPH_NODES         = data_conf["num_graph_nodes"]          # 그래프 노드수
-DELTA                   = data_conf["delta"]                    # 엣지 연결 확률
-FEATURE_STD             = data_conf["feature_std"]
+# configure 불러오기
+conf = Configure(path="./conf/data.yaml")
 
-# Graph
-@dataclass(slots=True)
-class Graph:
-    vertices: torch.Tensor
-    edge_index: torch.Tensor
-
-    @property
-    def edges(self) -> Iterator[tuple[int, int]]:
-        for edge in zip(*self.edge_index):
-            yield edge
-
-# Dataset
+# 데이터셋 정의
 class SubgraphMatchingDataset(InMemoryDataset):
-    def __init__(self, root: str) -> None:
-        self.subgraph = self._generate_subgraph(node_count=NUM_SUBGRAPH_NODES, delta=DELTA)
+    """Subgraph Matching Problem 실험에 쓰일 데이터셋입니다.
+    
+    데이터셋은 `subgraph`, `train`, `validate`, `test`로 구성됩니다.
+    `subgraph`는 데이터셋에서 공유하는 부분그래프를 의미합니다.
+    `train`, `validate`, `test`는 각각 학습, 검증, 테스트 데이터입니다.
+    데이터는 모두 초기화 시에 자동으로 생성됩니다.
+    `.load(path)`를 사용하여 데이터를 불러올 수 있으며,
+    `.get(idx)`를 사용하여 데이터를 참조할 수 있습니다.
+
+    Example:
+
+        dataset = SubgraphMatchingDataset(root="./data/")
+        dataset.load("train")
+    """
+
+    __slots__ = ()
+
+    def __init__(self, root: PathLike) -> None:
+        """데이터셋을 초기화합니다.
+        
+        지정된 `root` 디렉토리 하위에 데이터셋을 만듭니다.
+        데이터는 다음과 같은 구조로 저장됩니다.
+
+        ```
+        root
+        ├───subgraph.pt         # 부분그래프 저장용 파일
+        ├───train.pt            # 학습 데이터
+        ├───validate.pt         # 검증 데이터
+        ├───test.pt             # 테스트 데이터
+        ├───pre_transform.pt    # (무시)
+        └───pre_filter.pt       # (무시)
+
+        ```
+
+        Args:
+            root: 데이터셋 디렉토리의 주소
+
+        """
         super().__init__(root)
-        self.load(self.processed_paths[0])
 
-    # Subgraph 생성
-    def _generate_subgraph(self, node_count: int, delta: float) -> Graph:
-        vertices = list(range(node_count))
+    # 이 데이터셋은 '다운로드'를 받는 게 아니고 새로 데이터를 생성하는 것이기 때문에
+    # 별도로 'raw' 파일을 사용하지 않습니다.
+    # 대신 바로 'process' 단계에서 데이터를 생성합니다.
 
-        edges = deque()
-        non_edges = deque()
-
-        for u, v in combinations(vertices, 2):
-            if random() <= delta:
-                edges.append((u, v))
-            else:
-                non_edges.append((u, v))
-
-        def _connected(vertices: list[int], edges: list[tuple[int]]) -> bool:
-            graph = defaultdict(list)
-            for u, v in edges:
-                graph[u].append(v)
-                graph[v].append(u)
-
-            visited = set()
-            queue = deque([vertices[0]])
-            while queue:
-                node = queue.popleft()
-                if node not in visited:
-                    visited.add(node)
-                    queue.extend([neighbor for neighbor in graph[node] if neighbor not in visited])
-
-            return len(visited) == len(vertices)
-
-        shuffle(non_edges)
-        while not _connected(vertices, edges):
-            edges.append(non_edges.pop())
-
-        return Graph(
-            vertices=torch.tensor(vertices),
-            edge_index=torch.tensor(list(zip(*edges)))
-        )
-
-    # Graph 생성
-    def _generate_graph(self, node_count: int, delta: int, subgraph: Graph) -> Graph:
-        vertices = list(range(node_count))
-
-        edges = deque(subgraph.edges)
-        non_edges = deque()
-
-        for u, v in combinations(vertices, 2):
-            if (u, v) in edges:
-                continue
-
-            if random() <= delta:
-                edges.append((u, v))
-            else:
-                non_edges.append((u, v))
-
-        return Graph(
-            vertices=torch.tensor(vertices),
-            edge_index=torch.tensor(list(zip(*edges)))
-        )
-
-    # subgraph와 동형인 graph에 속한 노드 찾기
-    def _node_in_subgraph(self, subgraph: Graph, graph: Graph) -> list[bool]:
-        subgraph_nx = to_networkx(Data(x=subgraph.vertices, edge_index=subgraph.edge_index))
-        graph_nx = to_networkx(Data(x=graph.vertices, edge_index=graph.edge_index))
-
-        k = subgraph.vertices.size(dim=0)
-        result = [0] * graph.vertices.size(dim=0)
-
-        for v in graph.vertices:
-            others = [u for u in graph.vertices if u != v]
-            if result[v]:
-                continue
-
-            for subset in combinations(others, k-1):
-                candidate = list(subset) + [v]
-                candidate_subgraph = graph_nx.subgraph(candidate)
-    
-                if nx.is_isomorphic(candidate_subgraph, subgraph_nx):
-                    for n in candidate:
-                        result[n] = 1
-                        break
-
-        return result
-    
     @property
     def raw_file_names(self):
         return []
     
     @property
     def processed_file_names(self):
-        return ['train.pt', 'validate.pt', 'test.pt']
+        return ['subgraph.pt', 'train.pt', 'validate.pt', 'test.pt']
 
-    @override
     @property
-    def processed_dir(self) -> str:
+    def processed_dir(self):
         return self.root
+    
+    # 데이터 생성 로직
+    @override
+    def process(self):
+        """데이터를 생성합니다.
+        
+        원래 `InMemoryDataset`의 `process`함수는 데이터 가공 과정을 서술합니다.
+        그러나 이번 실험의 목적과 설계 방식에 맞게, 데이터를 생성하는 로직을 서술합니다.
+        데이터셋은 부분 그래프와, 데이터(train, validate, test)로 나뉩니다.
+        둘 모두 *PyG*의 `Data` 형식으로 저장됩니다.
+        """
 
-    # ${data_dir}에 그래프 데이터 생성
-    def process(self) -> None:
-        data_list = []
+        subgraph = _generate_subgraph(
+            order=conf.num_subgraph_nodes,
+            delta=conf.delta 
+        )
 
-        num_train_data = NUM_DATA["train"]
-        num_validate_data = NUM_DATA["validate"]
-        num_test_data = NUM_DATA["test"]
+        torch.save(self.collate([subgraph.to_data()]), self.processed_paths[0])
 
-        for i in range(num_train_data + num_validate_data + num_test_data):
-            graph = self._generate_graph(node_count=NUM_GRAPH_NODES, delta=DELTA, subgraph=self.subgraph)
-            # 첨언
-            # 논문을 열심히 읽어봤는데, 딱히 feature(label)를 주는 방법에 대한 서술을 발견하지 못했습니다.
-            # 전 초깃값(label)이 의미가 없더라도, 메세지 파싱을 통해 구조적 특성을 반영하다보면 해결된다는 주장으로 해석했습니다.
-            # 그래서 feature를 줄 때, 특별히 정보를 담지 않고, 무작위로 값을 넣도록 했습니다.
-            # ** 만약에 실험 결과가 좋지 않게 나온다면 이것 때문일 수 있습니다 **
-            feature = torch.Tensor([
-                [randint(0, 10)+gauss(sigma=FEATURE_STD)]
-                for _ in graph.vertices
-            ])
-            y=torch.tensor(self._node_in_subgraph(self.subgraph, graph))
-            print(feature.shape, graph.edge_index.shape, y.shape)
-            
-            data_list.append(Data(x=feature, edge_index=graph.edge_index, y=y))
+        full_data = {"train": [], "validate": [], "test": []}
 
-        torch.save(self.collate(data_list[:num_train_data]), self.processed_paths[0])
-        torch.save(self.collate(data_list[num_train_data:num_train_data+num_validate_data]), self.processed_paths[1])
-        torch.save(self.collate(data_list[num_train_data+num_validate_data:]), self.processed_paths[2])
+        for i, key in enumerate(full_data.keys(), start=1):
+            for _ in range(conf.num_data[key]):
+                graph = _generate_supergraph(
+                    subgraph=subgraph,
+                    order=conf.num_graph_nodes,
+                    delta=conf.delta
+                )
+                feature = torch.tensor([
+                    [randint(0, 10)+gauss(sigma=conf.feature_std)]
+                    for _ in graph.nodes
+                ])
+                y=torch.tensor(list(graph.subnodes(subgraph)))
 
-    def set_type(self, type=Literal['train', 'validate', 'test']) -> None:
-        self.load(self.processed_paths[['train', 'validate', 'test'].index(type)])
+                full_data[key].append(
+                    Data(
+                        x=feature,
+                        edge_index=graph.edge_index,
+                        y=y
+                    )
+                )
+            torch.save(self.collate(full_data[key]), self.processed_paths[i])
+
+# 여기서부터는 논문에서 소개된 데이터 생성 방식을 다룹니다.
+# 논문의 설명에 의하면,
+# 1. 부분 그래프로 사용할 그래프 S를 만든다.
+# 2. S를 포함하는 더 큰 그래프 G를 만든다.
+# 와 같이 데이터셋을 제작합니다.
+
+def _generate_subgraph(order: int, delta: float) -> Graph:
+    """그래프를 생성합니다.
+    
+    논문에 소개된 방식을 사용하여 (부분)그래프를 생성합니다.
+    1. 가능한 모든 엣지에 대해 `delta`의 확률로 엣지을 연결합니다.
+    2. 연결그래프가 될 때까지 하나씩 엣지을 추가합니다.
+
+    Args:
+        order: 그래프의 위수
+        delta: 엣지의 연결 확률
+    """
+    edges: set[Edge] = set()
+    non_edges: set[Edge] = set()
+
+    for u, v in permutations(range(order), 2):
+        if random() < delta:
+            edges.add(Edge(u, v))
+        else:
+            non_edges.add(Edge(u, v))
+    
+    graph = Graph(order=order, edges=edges)
+
+    while not graph.connected():
+        edge = choice(non_edges)
+        non_edges.remove(edge)
+        graph.add(edge)
+
+    return graph
+
+def _generate_supergraph(subgraph: Graph, order: int, delta: float) -> Graph:
+    """상위 그래프(supergraph)를 생성합니다.
+    
+    `subgraph`를 포함하되 위수가 `order`인 더 큰 그래프를 생성합니다.
+    연결 확률(`delta`)에 따라 엣지는 무작위로 생성됩니다.
+
+    Args:
+        subgraph: 포함해야 하는 부분그래프
+        order: 그래프의 위수
+        delta: 엣지의 연결 확률
+    """
+    edges: set[Edge] = set(subgraph._edges)
+
+    for u, v in permutations(range(order), 2):
+        if Edge(u, v) in edges:
+            continue
+
+        if random() < delta:
+            edges.add(Edge(u, v))
+    
+    return Graph(order=order, edges=edges)
