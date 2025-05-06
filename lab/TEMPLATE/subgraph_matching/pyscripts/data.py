@@ -114,7 +114,7 @@ class SubgraphMatchingDataset(InMemoryDataset):
                     [randint(0, 10)+gauss(sigma=conf.feature_std)]
                     for _ in graph.nodes
                 ])
-                y=torch.tensor(list(graph.subnodes(subgraph)))
+                y=torch.tensor([1 if node in graph.subnodes(subgraph) else -1 for node in graph.nodes])
 
                 full_data[key].append(
                     Data(
@@ -172,6 +172,7 @@ def _generate_supergraph(subgraph: Graph, order: int, delta: float) -> Graph:
         delta: 엣지의 연결 확률
     """
     edges: set[Edge] = set(subgraph._edges)
+    non_edges: set[Edge] = set()
 
     for u, v in permutations(range(order), 2):
         if Edge(u, v) in edges:
@@ -179,5 +180,14 @@ def _generate_supergraph(subgraph: Graph, order: int, delta: float) -> Graph:
 
         if random() < delta:
             edges.add(Edge(u, v))
+        else:
+            non_edges.add(Edge(u, v))
+
+    graph = Graph(order=order, edges=edges)
+
+    while not graph.connected():
+        edge = choice(non_edges)
+        non_edges.remove(edge)
+        graph.add(edge)
     
     return Graph(order=order, edges=edges)
