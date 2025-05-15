@@ -2,11 +2,9 @@
 
 # setup.sh가 있는 위치
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-echo $SCRIPT_DIR
 
 # 복사할 항목 (setup.sh 있는 디렉토리 기준)
-FILES_TO_COPY=("conf" "pyscripts" "utils" "db.sh")
-
+FILES_TO_COPY=("conf" "pyscripts" "utils" "db.sh" "requirements.txt")
 echo "🔧 Subgraph Matching 실험 파일을 현재 폴더($(pwd))로 복사합니다."
 
 for item in "${FILES_TO_COPY[@]}"; do

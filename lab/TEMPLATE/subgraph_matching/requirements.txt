@@ -1,0 +1,6 @@
+torch==2.6.0
+torch-geometric==2.6.1
+torch-scatter==2.1.2
+PyYAML==6.0.2
+networkx==3.4.2
+numpy==2.2.5
