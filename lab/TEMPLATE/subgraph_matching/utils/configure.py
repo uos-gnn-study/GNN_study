@@ -16,7 +16,7 @@ from os import PathLike
 import os.path as osp
 import yaml
 
-ConfigureItem: TypeAlias = Sequence | Mapping | int | float | str
+ConfigureItem: TypeAlias = Sequence["ConfigureItem"] | Mapping[str, "ConfigureItem"] | int | float | str
 
 class Configure:
     """`yaml`로 저장된 구성 정보를 처리하는 클래스입니다.

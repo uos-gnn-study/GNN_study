@@ -2,11 +2,6 @@
 
 set -uo pipefail
 
-# ------------------ 설정 ------------------
-# 기본값
-data_name=subgraph_matching
-data_dir=data/${data_name}/
-
 export PYTHONPATH='.'
 
 # ------------------ 생성 ------------------
@@ -17,13 +12,13 @@ else
     mkdir -p ${data_dir}
     touch ${data_dir}/log
 
-    args="--output_dir ${data_dir}"
+    args="--data_dir ${data_dir}"
 
     python utils/prepare_data.py ${args}
     status=$?
 
     if [ $status -ne 0 ]; then
-    echo "[db.sh] 데이터 생성 과정에서 문제가 발생하였습니다. 프로세스를 종료합니다."
+    echo "[db.sh] 데이터 생성 과정에서 문제가 발생하였습니다."
     exit 1
     else
     echo "[db.sh] 데이터 생성이 완료되었습니다."
@@ -39,8 +34,8 @@ python utils/validate_data.py ${args}
 status=$?
 
 if [ $status -ne 0 ]; then
-echo "[db.sh] 데이터 검증 과정에서 문제가 발생하였습니다. 프로세스를 종료합니다."
-exit 1
+    echo "[db.sh] 데이터 검증 과정에서 문제가 발생하였습니다."
+    exit 1
 else
-echo "[db.sh] 데이터 검증이 완료되었습니다."
+    echo "[db.sh] 데이터 검증이 완료되었습니다."
 fi
