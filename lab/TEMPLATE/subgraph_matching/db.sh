@@ -15,7 +15,7 @@ if [ -d ${data_dir} ] && find ${data_dir} -name "*.pt" | grep -q . ; then
 else
     echo "[db.sh] 데이터 디렉토리가 발견되지 않았습니다. 데이터를 새로 생성합니다."
     mkdir -p ${data_dir}
-    touch ${data_dir}/log
+    touch ${data_dir}/log.txt
 
     args="--output_dir ${data_dir}"
 
