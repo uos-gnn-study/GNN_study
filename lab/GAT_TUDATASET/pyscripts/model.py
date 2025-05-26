@@ -108,16 +108,43 @@ class GATLastLayer(GATLayer):
 		return output
 	
 class GATModel(nn.Module):
-	def __init__(self) -> None:
-		super().__init__()
-		self.gat1 = GATLayer(...)
-		self.out1 = nn.ELU(alpha=1.0)
-		self.gat2 = GATLayer(...)
-		self.out2 = nn.Sigmoid()
-			
-	def forward(self, x: Tensor, edge_index: Tensor):
-		x = self.gat1(x, edge_index)
-		x = self.out1(x)
-		x = self.gat2(x, edge_index)
-		x = self.out2(x)
-		return x
+    def __init__(
+        self,
+        num_layers: int,
+        num_nodes: int,
+        num_heads: int,
+        in_channels: int,
+        hidden_channels: int,
+        out_channels: int,
+        leakyrelu_slope: float = 0.2
+    ) -> None:
+        super().__init__()
+
+        self.layers = nn.ModuleList()
+        self.activations = nn.ModuleList()
+
+        for i in range(num_layers):
+            input_dim = in_channels if i == 0 else hidden_channels * num_heads
+            output_dim = out_channels if i == num_layers - 1 else hidden_channels
+
+            layer_cls = GATLastLayer if i == num_layers - 1 else GATLayer
+            self.layers.append(
+                layer_cls(
+                    num_nodes=num_nodes,
+                    num_heads=num_heads,
+                    in_channels=input_dim,
+                    out_channels=output_dim,
+                    leakyrelu_slope=leakyrelu_slope
+                )
+            )
+
+            if i != num_layers - 1:
+                self.activations.append(nn.ELU(alpha=1.0))
+            else:
+                self.activations.append(nn.Sigmoid())
+
+    def forward(self, x: Tensor, edge_index: Tensor) -> Tensor:
+        for layer, act in zip(self.layers, self.activations):
+            x = layer(x, edge_index)
+            x = act(x)
+        return x
